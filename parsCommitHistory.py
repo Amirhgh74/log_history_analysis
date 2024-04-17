@@ -70,10 +70,14 @@ def parse_diff(diff_file_path):
                 current_changes = []
                 context_lines = []
             # Extract the start line number for the 'after' file from the chunk header
-            match = re.search(r'\+(\d+)', line)
+
+            # -(\d+),\d+ \+(\d+),\d+
+            # \+(\d+)
+
+            match = re.search(r'-(\d+),\d+ \+(\d+),\d+', line)
             if match:
-                current_chunk_start_add = int(match.group(1))
-                current_chunk_start_del = int(match.group(0))
+                current_chunk_start_add = int(match.group(2))
+                current_chunk_start_del = int(match.group(1))
 
             collecting_context = True  # Reset context collecting for the new chunk
         elif line.startswith(('+', '-')):
@@ -128,6 +132,8 @@ def find_function_in_changes(java_file_path, changes):
 
     function_names = []
 
+    # print (f"analyzing the file {java_file_path}")
+
     # \s*(public|protected|private|static|final|synchronized)\s+[\w<>\[\]]+\s+\w+\s*\([^)]*\)\s*\{?
     # \b(public|protected|private|static)?\s+[\w<>\[\]]+\s+\w+\s*\(
     # \s*(public|protected|private|static|\s)+[\w<>\[\]]+\s+\w+\s*\([^)]*\)\s*{?\s*$
@@ -167,8 +173,12 @@ def find_function_in_changes(java_file_path, changes):
 
         # search from the start line backwards until a function definition is found 
         if not function_found:
+            # print ("start line: " ,start_line)
+            # print ("file name : " , java_file_path)
             # If no function definition is found in the change set, search backward
             for i in range(int (start_line) - 1, 0, -1):
+                # print (i)
+
                 if function_pattern.match(lines[i]):
                     # print(f"Nearest function found backward at line {i}: {lines[i].strip()}")
                     function_decl = lines[i].strip()
@@ -180,28 +190,21 @@ def find_function_in_changes(java_file_path, changes):
 
 if __name__ == "__main__":
 
-    # if len(sys.argv) != 2:
-    #     print("Usage: python3 analysis.py <input_directory>")
-    #     exit(1)
-
-    # input_directory = sys.argv[1]
-    # if not Path(input_directory).is_dir():
-    #     print("Input directory does not exist")
-    #     exit(1)
-
     input_directory = "commit_history/"
 
     result = []
     files_address = []
 
     for subdir, dirs, files in os.walk(input_directory):
-        for file in files:
+        for file in files: 
             files_address.append(os.path.join(subdir, file))
            
 
     matching_files = find_matching_files(files_address)
 
     final_output = []
+
+    i = 0
 
     # Loop through all files in the input directory
     for match in matching_files:
@@ -211,18 +214,28 @@ if __name__ == "__main__":
         before_file = match[2]
         
         changes = parse_diff(diff_file)
+        # print (changes)
 
-        detected_functions_add = find_function_in_changes(after_file, [(ln, ct, cl, cx) for ln, ct, cl, cx in changes if ct in ['addition', 'modification']])
+        addition_list = [(ln, ct, cl, cx) for ln, ct, cl, cx in changes if ct in ['addition', 'modification']]
+        deletion_list = [(ln, ct, cl, cx) for ln, ct, cl, cx in changes if ct == 'deletion']
 
-        detected_functions_del = find_function_in_changes(before_file, [(ln, ct, cl) for ln, ct, cl in changes if ct == 'deletion'])
+        detected_functions_add = []
+        detected_functions_del = []
 
-        if detected_functions_add:
-            for item in detected_functions_add:
-                final_output.append([item, after_file])
-        if detected_functions_del:
-            for item in detected_functions_del:
-                final_output.append([item, before_file])
 
-        with open("changed_functions.txt", "w") as file:
-            for row in final_output:
-                file.write(str(row[0]) + "   " + row[1] + "\n")
+        if addition_list != []:
+            detected_functions_add = find_function_in_changes(after_file, addition_list)
+                
+        if deletion_list != []:
+            detected_functions_del = find_function_in_changes(before_file, deletion_list)
+                
+        
+        for item in detected_functions_add:
+            final_output.append([item, after_file])
+        
+        for item in detected_functions_del:
+            final_output.append([item, before_file])
+
+    with open("changed_functions_elastic.txt", "w") as file:
+        for row in final_output:
+            file.write(str(row[0]) + "   " + row[1] + "\n")

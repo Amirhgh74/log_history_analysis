@@ -5,7 +5,6 @@ import sys
 import subprocess
 from pathlib import Path
 import xml.etree.ElementTree as ET
-import logging
 
 from utils import get_element_texts
 
@@ -23,17 +22,9 @@ if __name__ == "__main__":
     #     print("Usage: python3 analysis.py <input_directory>")
     #     exit(1)
 
-    # Setup logging
-    logging.basicConfig(filename='srcml_processing.log', level=logging.DEBUG, 
-                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-
-    last_function = ""
-    last_file = ""
-
-
-    file_address = "changed_functions_elastic.txt"
+    file_address = "changed_functions.txt"
     file_list = []
 
     with open(file_address , 'r') as file:
@@ -50,39 +41,18 @@ if __name__ == "__main__":
 
         input_file = tuple[1]
         intended_function = tuple[0]
-
-        if last_function == intended_function and last_file == input_file:
-            continue
     
         # check if the file exist
         if not os.path.isfile(input_file) or not input_file.endswith('.java'):
             print ('file not exist or not supported!')
             exit(1)
 
-        logging.info(f"Processing file: {input_file}")
-
-        try:
-            process = subprocess.run(['srcml', input_file], capture_output=True) # Run srcml on file
-            xml = process.stdout.decode('utf-8')
-        except subprocess.CalledProcessError as e:
-            logging.error(f"srcML failed for {input_file}: {e.stderr.decode()}")
-            continue
-
-        
-        if not xml.strip():
-            logging.warning(f"The XML output is empty for {input_file}.")
-        
-
+    
+        process = subprocess.run(['srcml', input_file], capture_output=True) # Run srcml on file
+        xml = process.stdout.decode('utf-8')
         xml = re.sub('xmlns="[^"]+"', '', xml, count=1) # Remove namespace
-        logging.debug(f"Namespace removed for {input_file}.")
 
-        try:
-            root = ET.fromstring(xml)
-            logging.info(f"XML parsed successfully for {input_file}.")
-        except ET.ParseError as e:
-            logging.error(f"Failed to parse XML for {input_file}: {e}")
-            continue
-
+        root = ET.fromstring(xml)
         imports = []
 
         for item in root.findall('.//import/name'):
@@ -162,9 +132,6 @@ if __name__ == "__main__":
                 # Number of branches
                 number_of_if = len(function.findall('.//if') + function.findall('.//else'))
                 number_of_switch = len(function.findall('.//switch'))
-
-                last_file = input_file
-                last_function = intended_function
 
                 
                 result.append({
